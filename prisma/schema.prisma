@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agendamento {
+  id         Int      @id @default(autoincrement())
+  servico    String
+  nome       String
+  telefone   String
+  data       DateTime
+  horario    String
+  status     String   @default("Confirmado")
+  criadoEm   DateTime @default(now())
+
+  @@index([telefone])
+  @@unique([data, horario])
+}
