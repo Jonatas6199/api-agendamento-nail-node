@@ -5,20 +5,42 @@ const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 const TIMEZONE = process.env.CALENDAR_TIMEZONE || 'America/Sao_Paulo';
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
 
+
 // Caminho do JSON baixado no Google Cloud (conta de serviço)
 const KEY_FILE_PATH =
   process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH ||
   path.join(__dirname, '../../google-service-account.json');
+
+
 
 let cachedAuthClient = null;
 
 async function getAuthClient() {
   if (cachedAuthClient) return cachedAuthClient;
 
-  const auth = new google.auth.GoogleAuth({
-    keyFile: KEY_FILE_PATH,
-    scopes: SCOPES,
-  });
+  let auth;
+
+  const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH;
+
+  if (serviceAccountJson) {
+   
+    const credentials = JSON.parse(serviceAccountJson);
+
+    if (credentials.private_key) {
+      credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+    }
+
+    auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: SCOPES,
+    });
+
+  } else {
+    auth = new google.auth.GoogleAuth({
+      keyFile: KEY_FILE_PATH,
+      scopes: SCOPES,
+    });
+  }
 
   cachedAuthClient = await auth.getClient();
   return cachedAuthClient;
