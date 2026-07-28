@@ -35,6 +35,7 @@ model Procedure {
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  description String
 
   appointments Appointment[]
 
