@@ -49,6 +49,13 @@ async function getAvailableSlots(procedureId, dateStr) {
   if (!workingHours || !workingHours.active) {
     return []; // dia sem expediente (ex: domingo/segunda)
   }
+  const lunchStartMinutes = workingHours.lunchStartTime
+  ? timeStringToMinutes(workingHours.lunchStartTime)
+  : null;
+
+  const lunchEndMinutes = workingHours.lunchEndTime
+  ? timeStringToMinutes(workingHours.lunchEndTime)
+  : null;
 
   const dayStartMinutes = timeStringToMinutes(workingHours.startTime);
   const dayEndMinutes = timeStringToMinutes(workingHours.endTime);
@@ -79,6 +86,18 @@ async function getAvailableSlots(procedureId, dateStr) {
     const slotEnd = new Date(slotStart.getTime() + durationMin * 60000);
 
     if (slotStart < now) continue; // não permite horário já passado no dia atual
+
+    const slotStartMinutes = minutes;
+    const slotEndMinutes = minutes + durationMin;
+
+    // Verifica conflito com horário de almoço
+    const hasLunchConflict =
+      lunchStartMinutes !== null &&
+      lunchEndMinutes !== null &&
+      slotStartMinutes < lunchEndMinutes &&
+      slotEndMinutes > lunchStartMinutes;
+
+    if (hasLunchConflict) continue;
 
     const hasConflict = existingAppointments.some(
       (appt) => slotStart < appt.endTime && slotEnd > appt.startTime

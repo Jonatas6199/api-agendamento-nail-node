@@ -35,7 +35,7 @@ model Procedure {
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  description String
+  description Json
 
   appointments Appointment[]
 
@@ -96,6 +96,8 @@ model WorkingHours {
   startTime String // formato "HH:mm", ex: "09:00"
   endTime   String // formato "HH:mm", ex: "18:00"
   active    Boolean @default(true)
+  lunchStartTime String // formato "HH:mm", ex: "09:00"
+  lunchEndTime String // formato "HH:mm", ex: "09:00"
 
   @@map("working_hours")
 }
