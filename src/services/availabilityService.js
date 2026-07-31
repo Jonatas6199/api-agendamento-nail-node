@@ -4,6 +4,9 @@ const { ApiError } = require('../middleware/errorHandler');
 // Granularidade dos horários candidatos exibidos ao cliente (em minutos)
 const SLOT_STEP_MINUTES = 15;
 
+// Intervalo entre os atendimentos
+const CLEANUP_BUFFER_MINUTES = 30;
+
 function timeStringToMinutes(hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
@@ -99,9 +102,13 @@ async function getAvailableSlots(procedureId, dateStr) {
 
     if (hasLunchConflict) continue;
 
-    const hasConflict = existingAppointments.some(
-      (appt) => slotStart < appt.endTime && slotEnd > appt.startTime
-    );
+    const hasConflict = existingAppointments.some((appt) => {
+      const bufferedEnd = new Date(
+        new Date(appt.endTime).getTime() + CLEANUP_BUFFER_MINUTES * 60000
+      );
+
+      return slotStart < bufferedEnd && slotEnd > appt.startTime;
+    });
 
     if (!hasConflict) {
       slots.push({
