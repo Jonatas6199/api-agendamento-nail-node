@@ -1,3 +1,6 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateEnum
 CREATE TYPE "AppointmentStatus" AS ENUM ('SCHEDULED', 'CANCELLED', 'COMPLETED');
 
@@ -10,6 +13,7 @@ CREATE TABLE "users" (
     "source" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "anoNascimento" TEXT,
 
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
@@ -23,6 +27,7 @@ CREATE TABLE "procedures" (
     "active" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "description" JSONB,
 
     CONSTRAINT "procedures_pkey" PRIMARY KEY ("id")
 );
@@ -67,6 +72,8 @@ CREATE TABLE "working_hours" (
     "startTime" TEXT NOT NULL,
     "endTime" TEXT NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
+    "lunchStartTime" TEXT,
+    "lunchEndTime" TEXT,
 
     CONSTRAINT "working_hours_pkey" PRIMARY KEY ("id")
 );
@@ -105,7 +112,8 @@ CREATE UNIQUE INDEX "blocked_dates_date_key" ON "blocked_dates"("date");
 ALTER TABLE "anamnesis_forms" ADD CONSTRAINT "anamnesis_forms_appointmentId_fkey" FOREIGN KEY ("appointmentId") REFERENCES "appointments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "appointments" ADD CONSTRAINT "appointments_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "appointments" ADD CONSTRAINT "appointments_procedureId_fkey" FOREIGN KEY ("procedureId") REFERENCES "procedures"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "appointments" ADD CONSTRAINT "appointments_procedureId_fkey" FOREIGN KEY ("procedureId") REFERENCES "procedures"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "appointments" ADD CONSTRAINT "appointments_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+

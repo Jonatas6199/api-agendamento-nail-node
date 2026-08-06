@@ -1,74 +1,58 @@
-// Prisma schema - Sistema de agendamentos Nail Design
-// Banco: PostgreSQL (Supabase)
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")   // connection pooling (pgbouncer) - usado em runtime
-  directUrl = env("DIRECT_URL")     // conexão direta - usado só pelo Prisma Migrate
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-// Cliente do salão. Login feito por telefone + CPF.
 model User {
-  id        String   @id @default(uuid())
-  phone     String   @unique // armazenado somente com dígitos, ex: "11999998888"
-  cpf       String   @unique // armazenado somente com dígitos, 11 caracteres
-  name      String?
-  source    String? // De onde veio: Instagram, Indicação, Panfleto, etc.
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  anoNascimento String 
-
-  appointments Appointment[]
+  id            String        @id @default(uuid())
+  phone         String        @unique
+  cpf           String?        @unique
+  name          String?
+  source        String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  anoNascimento String?
+  appointments  Appointment[]
 
   @@map("users")
 }
 
-// Catálogo de procedimentos oferecidos
 model Procedure {
-  id          String   @id @default(uuid())
-  name        String // Ex: "Esmaltação em Gel", "Alongamento no molde F1"
-  price        Decimal @db.Decimal(10, 2)
-  durationMin Int // duração média em minutos, usada para calcular disponibilidade
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  description Json
-
+  id           String        @id @default(uuid())
+  name         String
+  price        Decimal       @db.Decimal(10, 2)
+  durationMin  Int
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  description  Json?
   appointments Appointment[]
 
   @@map("procedures")
 }
 
-// Ficha de anamnese preenchida antes da confirmação de cada agendamento
 model Anamnesis {
-  id               String   @id @default(uuid())
-  appointmentId    String   @unique
-  hasNailFungus    Boolean  @default(false) // possui fungo/micose
-  hasGelOrAcrylic  Boolean  @default(false) // já possui gel/acrílico na unha
-  isPregnant       Boolean  @default(false)
-  hasDiabetes      Boolean  @default(false)
-  hasAllergies     Boolean  @default(false)
+  id               String      @id @default(uuid())
+  appointmentId    String      @unique
+  hasNailFungus    Boolean     @default(false)
+  hasGelOrAcrylic  Boolean     @default(false)
+  isPregnant       Boolean     @default(false)
+  hasDiabetes      Boolean     @default(false)
+  hasAllergies     Boolean     @default(false)
   allergiesDetails String?
   medicationsInUse String?
   observations     String?
-  createdAt        DateTime @default(now())
-
-  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  createdAt        DateTime    @default(now())
+  appointment      Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@map("anamnesis_forms")
 }
 
-enum AppointmentStatus {
-  SCHEDULED
-  CANCELLED
-  COMPLETED
-}
-
-// Agendamento realizado pelo cliente
 model Appointment {
   id            String            @id @default(uuid())
   userId        String
@@ -76,38 +60,41 @@ model Appointment {
   startTime     DateTime
   endTime       DateTime
   status        AppointmentStatus @default(SCHEDULED)
-  clientEmail   String? // opcional, para envio de convite do Google Agenda
-  googleEventId String? // id do evento criado no Google Calendar
+  clientEmail   String?
+  googleEventId String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
-
-  user      User       @relation(fields: [userId], references: [id])
-  procedure Procedure  @relation(fields: [procedureId], references: [id])
-  anamnesis Anamnesis?
+  anamnesis     Anamnesis?
+  procedure     Procedure         @relation(fields: [procedureId], references: [id])
+  user          User              @relation(fields: [userId], references: [id])
 
   @@index([startTime])
   @@index([userId])
   @@map("appointments")
 }
 
-// Horário de funcionamento por dia da semana (0=domingo ... 6=sábado)
 model WorkingHours {
-  id        String  @id @default(uuid())
-  weekday   Int     @unique
-  startTime String // formato "HH:mm", ex: "09:00"
-  endTime   String // formato "HH:mm", ex: "18:00"
-  active    Boolean @default(true)
-  lunchStartTime String // formato "HH:mm", ex: "09:00"
-  lunchEndTime String // formato "HH:mm", ex: "09:00"
+  id             String  @id @default(uuid())
+  weekday        Int     @unique
+  startTime      String
+  endTime        String
+  active         Boolean @default(true)
+  lunchStartTime String?
+  lunchEndTime   String?
 
   @@map("working_hours")
 }
 
-// Datas específicas bloqueadas (feriados, folgas, etc.)
 model BlockedDate {
   id     String   @id @default(uuid())
   date   DateTime @unique @db.Date
   reason String?
 
   @@map("blocked_dates")
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
 }
