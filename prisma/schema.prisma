@@ -20,6 +20,7 @@ model User {
   source    String? // De onde veio: Instagram, Indicação, Panfleto, etc.
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  anoNascimento String 
 
   appointments Appointment[]
 

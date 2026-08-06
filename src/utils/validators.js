@@ -11,6 +11,10 @@ function normalizeCpf(cpf) {
   return onlyDigits(cpf);
 }
 
+function normalizeAnoNascimento(anoNascimento) {
+  return onlyDigits(anoNascimento);
+}
+
 // Validação do dígito verificador do CPF (algoritmo padrão)
 function isValidCPF(rawCpf) {
   const cpf = normalizeCpf(rawCpf);
@@ -36,6 +40,13 @@ function isValidCPF(rawCpf) {
   if (secondCheck !== parseInt(cpf[10], 10)) return false;
 
   return true;
+}
+
+function isValidAnoNascimento(anoNascimento) {
+  const normalized = normalizeAnoNascimento(anoNascimento);
+  // Aceita anos de nascimento com 4 dígitos
+  if(normalized > new Date().getFullYear()) return false; // não aceita anos futuros
+  return normalized.length === 4 && !isNaN(normalized);
 }
 
 function isValidPhone(rawPhone) {
