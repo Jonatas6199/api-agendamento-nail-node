@@ -67,4 +67,6 @@ module.exports = {
   isValidCPF,
   isValidPhone,
   isValidEmail,
+  isValidAnoNascimento,
+  normalizeAnoNascimento,
 };

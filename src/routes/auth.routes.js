@@ -2,7 +2,7 @@ const express = require('express');
 const prisma = require('../config/prisma');
 const asyncHandler = require('../middleware/asyncHandler');
 const { ApiError } = require('../middleware/errorHandler');
-const { normalizePhone, normalizeAnoNascimento, isValidCPF, isValidPhone } = require('../utils/validators');
+const { normalizePhone, normalizeAnoNascimento, isValidCPF, isValidPhone, isValidAnoNascimento } = require('../utils/validators');
 
 const router = express.Router();
 
