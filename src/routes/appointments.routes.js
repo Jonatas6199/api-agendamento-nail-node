@@ -5,6 +5,7 @@ const { ApiError } = require('../middleware/errorHandler');
 const { isValidEmail } = require('../utils/validators');
 const availabilityService = require('../services/availabilityService');
 const googleCalendarService = require('../services/googleCalendarService');
+const { hasRecentAnamnesis } = require('../services/anamnesisService'); 
 
 const router = express.Router();
 
@@ -16,26 +17,36 @@ const router = express.Router();
  *   anamnesis: {
  *     hasNailFungus, hasGelOrAcrylic, isPregnant, hasDiabetes,
  *     hasAllergies, allergiesDetails?, medicationsInUse?, observations?
- *   }
+ *   },
+ *   hasGelOrAcrylic?
  * }
  */
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { userId, procedureId, startTime, clientEmail, anamnesis } = req.body;
+    const { userId, procedureId, startTime, clientEmail, anamnesis, hasGelOrAcrylic } = req.body;
 
     if (!userId || !procedureId || !startTime) {
       throw new ApiError(400, 'userId, procedureId e startTime são obrigatórios.');
     }
-    if (!anamnesis) {
-      throw new ApiError(400, 'A ficha de anamnese é obrigatória para confirmar o agendamento.');
-    }
+
     if (clientEmail && !isValidEmail(clientEmail)) {
       throw new ApiError(400, 'E-mail informado é inválido.');
     }
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new ApiError(404, 'Usuário não encontrado.');
+
+    // --- VERIFICAÇÃO DA ANAMNESE ---
+    const userHasRecentAnamnesis = await hasRecentAnamnesis(userId);
+
+    // Se NÃO tem anamnese nos últimos 3 meses E NÃO enviou os dados de anamnese na requisição
+    if (!userHasRecentAnamnesis && !anamnesis) {
+      throw new ApiError(
+        400,
+        'A ficha de anamnese é obrigatória, pois não identificamos um preenchimento nos últimos 3 meses.'
+      );
+    }
 
     const procedure = await prisma.procedure.findUnique({ where: { id: procedureId } });
     if (!procedure || !procedure.active) {
@@ -54,7 +65,7 @@ router.post(
       throw new ApiError(409, 'Este horário acabou de ser reservado. Escolha outro horário.');
     }
 
-    // Cria o agendamento + ficha de anamnese em uma única transação
+    // Cria o agendamento + ficha de anamnese (somente se fornecida) em uma única transação
     const appointment = await prisma.$transaction(async (tx) => {
       const created = await tx.appointment.create({
         data: {
@@ -63,27 +74,28 @@ router.post(
           startTime: start,
           endTime: end,
           clientEmail: clientEmail || null,
-          anamnesis: {
-            create: {
-              hasNailFungus: !!anamnesis.hasNailFungus,
-              hasGelOrAcrylic: !!anamnesis.hasGelOrAcrylic,
-              isPregnant: !!anamnesis.isPregnant,
-              hasDiabetes: !!anamnesis.hasDiabetes,
-              hasAllergies: !!anamnesis.hasAllergies,
-              allergiesDetails: anamnesis.allergiesDetails || null,
-              medicationsInUse: anamnesis.medicationsInUse || null,
-              observations: anamnesis.observations || null,
+          // Cria o registro na tabela de Anamnese apenas se a propriedade 'anamnesis' existir no body
+          ...(anamnesis && {
+            anamnesis: {
+              create: {
+                hasNailFungus: !!anamnesis.hasNailFungus,
+                hasGelOrAcrylic: !!anamnesis.hasGelOrAcrylic,
+                isPregnant: !!anamnesis.isPregnant,
+                hasDiabetes: !!anamnesis.hasDiabetes,
+                hasAllergies: !!anamnesis.hasAllergies,
+                allergiesDetails: anamnesis.allergiesDetails || null,
+                medicationsInUse: anamnesis.medicationsInUse || null,
+                observations: anamnesis.observations || null,
+              },
             },
-          },
+          }),
         },
         include: { anamnesis: true, procedure: true, user: true },
       });
       return created;
     });
 
-    // Cria o evento no Google Agenda da profissional.
-    // Se essa etapa falhar, o agendamento já existe no banco; devolvemos aviso mas não revertemos
-    // a reserva do horário, para não perder o slot já validado.
+    // Cria o evento no Google Agenda da profissional
     let googleEvent = null;
     try {
       googleEvent = await googleCalendarService.createEvent({
@@ -92,7 +104,7 @@ router.post(
           `Cliente: ${user.name || 'Não informado'}`,
           `Telefone: ${user.phone}`,
           `Procedimento: ${procedure.name}`,
-          anamnesis.observations ? `Observações: ${anamnesis.observations}` : null,
+          anamnesis?.observations ? `Observações: ${anamnesis.observations}` : null,
         ]
           .filter(Boolean)
           .join('\n'),

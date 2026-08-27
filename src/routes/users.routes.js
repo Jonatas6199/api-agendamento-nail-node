@@ -34,4 +34,15 @@ router.patch(
   })
 );
 
+// GET /api/users/:userId/anamnesis-status
+router.get('/:id/anamnesis-status', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const hasRecent = await hasRecentAnamnesis(id);
+
+  return res.json({
+    userId: id,
+    isAnamnesisRequired: !hasRecent // Se não tiver recente, se torna obrigatória
+  });
+}));
+
 module.exports = router;
