@@ -5,7 +5,7 @@ const { ApiError } = require('../middleware/errorHandler');
 const { isValidEmail } = require('../utils/validators');
 const availabilityService = require('../services/availabilityService');
 const googleCalendarService = require('../services/googleCalendarService');
-const { hasRecentAnamnesis } = require('../services/anamnesisService'); 
+const { hasRecentAnamnesis, hasPreviousAppointments } = require('../services/anamnesisService');
 
 const router = express.Router();
 
@@ -15,16 +15,16 @@ const router = express.Router();
  *   userId, procedureId, startTime (ISO),
  *   clientEmail?,
  *   anamnesis: {
- *     hasNailFungus, hasGelOrAcrylic, isPregnant, hasDiabetes,
- *     hasAllergies, allergiesDetails?, medicationsInUse?, observations?
- *   },
- *   hasGelOrAcrylic?
+ *     isFirstVisit, usesGelPolish, hasCosmeticAllergy,
+ *     cosmeticAllergyDetails?, hasFrequentLifting,
+ *     usesContinuousMedication, continuousMedicationDetails?
+ *   }
  * }
  */
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { userId, procedureId, startTime, clientEmail, anamnesis, hasGelOrAcrylic } = req.body;
+    const { userId, procedureId, startTime, clientEmail, anamnesis } = req.body;
 
     if (!userId || !procedureId || !startTime) {
       throw new ApiError(400, 'userId, procedureId e startTime são obrigatórios.');
@@ -38,7 +38,10 @@ router.post(
     if (!user) throw new ApiError(404, 'Usuário não encontrado.');
 
     // --- VERIFICAÇÃO DA ANAMNESE ---
-    const userHasRecentAnamnesis = await hasRecentAnamnesis(userId);
+    const [userHasRecentAnamnesis, userHasPreviousAppointments] = await Promise.all([
+      hasRecentAnamnesis(userId),
+      hasPreviousAppointments(userId),
+    ]);
 
     // Se NÃO tem anamnese nos últimos 3 meses E NÃO enviou os dados de anamnese na requisição
     if (!userHasRecentAnamnesis && !anamnesis) {
@@ -46,6 +49,42 @@ router.post(
         400,
         'A ficha de anamnese é obrigatória, pois não identificamos um preenchimento nos últimos 3 meses.'
       );
+    }
+
+    let cosmeticAllergyDetails = null;
+    let continuousMedicationDetails = null;
+
+    if (anamnesis) {
+      const requiredBooleanFields = [
+        'isFirstVisit',
+        'usesGelPolish',
+        'hasCosmeticAllergy',
+        'hasFrequentLifting',
+        'usesContinuousMedication',
+      ];
+
+      const missingAnswer = requiredBooleanFields.some(
+        (field) => typeof anamnesis[field] !== 'boolean'
+      );
+
+      if (missingAnswer) {
+        throw new ApiError(400, 'Responda todas as perguntas da ficha de anamnese com Sim ou Não.');
+      }
+
+      cosmeticAllergyDetails = typeof anamnesis.cosmeticAllergyDetails === 'string'
+        ? anamnesis.cosmeticAllergyDetails.trim()
+        : '';
+      continuousMedicationDetails = typeof anamnesis.continuousMedicationDetails === 'string'
+        ? anamnesis.continuousMedicationDetails.trim()
+        : '';
+
+      if (anamnesis.hasCosmeticAllergy && !cosmeticAllergyDetails) {
+        throw new ApiError(400, 'Informe qual ou quais alergias a cosméticos você possui.');
+      }
+
+      if (anamnesis.usesContinuousMedication && !continuousMedicationDetails) {
+        throw new ApiError(400, 'Informe qual ou quais medicamentos de uso contínuo você utiliza.');
+      }
     }
 
     const procedure = await prisma.procedure.findUnique({ where: { id: procedureId } });
@@ -78,14 +117,18 @@ router.post(
           ...(anamnesis && {
             anamnesis: {
               create: {
-                hasNailFungus: !!anamnesis.hasNailFungus,
-                hasGelOrAcrylic: !!anamnesis.hasGelOrAcrylic,
-                isPregnant: !!anamnesis.isPregnant,
-                hasDiabetes: !!anamnesis.hasDiabetes,
-                hasAllergies: !!anamnesis.hasAllergies,
-                allergiesDetails: anamnesis.allergiesDetails || null,
-                medicationsInUse: anamnesis.medicationsInUse || null,
-                observations: anamnesis.observations || null,
+                // O histórico de appointments prevalece sobre a resposta enviada pelo cliente.
+                isFirstVisit: !userHasPreviousAppointments && anamnesis.isFirstVisit,
+                usesGelPolish: anamnesis.usesGelPolish,
+                hasCosmeticAllergy: anamnesis.hasCosmeticAllergy,
+                cosmeticAllergyDetails: anamnesis.hasCosmeticAllergy
+                  ? cosmeticAllergyDetails
+                  : null,
+                hasFrequentLifting: anamnesis.hasFrequentLifting,
+                usesContinuousMedication: anamnesis.usesContinuousMedication,
+                continuousMedicationDetails: anamnesis.usesContinuousMedication
+                  ? continuousMedicationDetails
+                  : null,
               },
             },
           }),
@@ -104,7 +147,12 @@ router.post(
           `Cliente: ${user.name || 'Não informado'}`,
           `Telefone: ${user.phone}`,
           `Procedimento: ${procedure.name}`,
-          anamnesis?.observations ? `Observações: ${anamnesis.observations}` : null,
+          cosmeticAllergyDetails
+            ? `Alergias a cosméticos: ${cosmeticAllergyDetails}`
+            : null,
+          continuousMedicationDetails
+            ? `Medicamentos de uso contínuo: ${continuousMedicationDetails}`
+            : null,
         ]
           .filter(Boolean)
           .join('\n'),

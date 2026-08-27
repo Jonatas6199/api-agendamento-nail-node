@@ -11,7 +11,7 @@ datasource db {
 model User {
   id            String        @id @default(uuid())
   phone         String        @unique
-  cpf           String?        @unique
+  cpf           String?       @unique
   name          String?
   source        String?
   createdAt     DateTime      @default(now())
@@ -37,18 +37,24 @@ model Procedure {
 }
 
 model Anamnesis {
-  id               String      @id @default(uuid())
-  appointmentId    String      @unique
-  hasNailFungus    Boolean     @default(false)
-  hasGelOrAcrylic  Boolean     @default(false)
-  isPregnant       Boolean     @default(false)
-  hasDiabetes      Boolean     @default(false)
-  hasAllergies     Boolean     @default(false)
-  allergiesDetails String?
-  medicationsInUse String?
-  observations     String?
-  createdAt        DateTime    @default(now())
-  appointment      Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  id                          String      @id @default(uuid())
+  appointmentId               String      @unique
+  isFirstVisit                Boolean     @default(false)
+  usesGelPolish               Boolean     @default(false)
+  hasCosmeticAllergy          Boolean     @default(false)
+  cosmeticAllergyDetails      String?
+  hasFrequentLifting          Boolean     @default(false)
+  usesContinuousMedication    Boolean     @default(false)
+  continuousMedicationDetails String?
+  createdAt                   DateTime    @default(now())
+  appointment                 Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  // Colunas antigas preservadas apenas para manter o histórico existente.
+  legacyHasNailFungus   Boolean @default(false) @map("hasNailFungus") @ignore
+  legacyHasGelOrAcrylic Boolean @default(false) @map("hasGelOrAcrylic") @ignore
+  legacyIsPregnant      Boolean @default(false) @map("isPregnant") @ignore
+  legacyHasDiabetes     Boolean @default(false) @map("hasDiabetes") @ignore
+  legacyObservations    String? @map("observations") @ignore
 
   @@map("anamnesis_forms")
 }
@@ -64,10 +70,12 @@ model Appointment {
   googleEventId String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
-  hasGelOrAcrylic Boolean         @default (false)
   anamnesis     Anamnesis?
   procedure     Procedure         @relation(fields: [procedureId], references: [id])
   user          User              @relation(fields: [userId], references: [id])
+
+  // Coluna antiga preservada apenas para manter o histórico existente.
+  legacyHasGelOrAcrylic Boolean @default(false) @map("hasGelOrAcrylic") @ignore
 
   @@index([startTime])
   @@index([userId])

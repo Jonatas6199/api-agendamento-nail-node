@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../config/prisma');
 const asyncHandler = require('../middleware/asyncHandler');
 const { ApiError } = require('../middleware/errorHandler');
+const { hasRecentAnamnesis, hasPreviousAppointments } = require('../services/anamnesisService');
 
 const router = express.Router();
 
@@ -37,11 +38,23 @@ router.patch(
 // GET /api/users/:userId/anamnesis-status
 router.get('/:id/anamnesis-status', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const hasRecent = await hasRecentAnamnesis(id);
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+
+  if (!user) throw new ApiError(404, 'Usuário não encontrado.');
+
+  const [hasRecent, hasPrevious] = await Promise.all([
+    hasRecentAnamnesis(id),
+    hasPreviousAppointments(id),
+  ]);
 
   return res.json({
     userId: id,
-    isAnamnesisRequired: !hasRecent // Se não tiver recente, se torna obrigatória
+    isAnamnesisRequired: !hasRecent,
+    hasPreviousAppointments: hasPrevious,
+    isFirstVisit: !hasPrevious,
   });
 }));
 

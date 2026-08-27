@@ -28,7 +28,23 @@ async function hasRecentAnamnesis(userId) {
   return !!recentAnamnesis; // Retorna true se encontrou, false se não encontrou
 }
 
+/**
+ * Verifica se já existe qualquer agendamento para o usuário, independentemente
+ * do status ou da data. Um agendamento cancelado também caracteriza histórico
+ * no estúdio.
+ * @param {string} userId - ID do usuário
+ * @returns {Promise<boolean>} true se houver ao menos um agendamento.
+ */
+async function hasPreviousAppointments(userId) {
+  const appointment = await prisma.appointment.findFirst({
+    where: { userId },
+    select: { id: true },
+  });
+
+  return !!appointment;
+}
+
 module.exports = {
   hasRecentAnamnesis,
-  // ...outras funções da service
+  hasPreviousAppointments,
 };
