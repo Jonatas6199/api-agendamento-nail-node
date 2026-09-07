@@ -113,6 +113,7 @@ router.post(
           startTime: start,
           endTime: end,
           clientEmail: clientEmail || null,
+          totalPrice: procedure.price,
           // Cria o registro na tabela de Anamnese apenas se a propriedade 'anamnesis' existir no body
           ...(anamnesis && {
             anamnesis: {
@@ -277,7 +278,7 @@ router.patch(
 
     const updated = await prisma.appointment.update({
       where: { id: appointment.id },
-      data: { status: 'CANCELLED' },
+      data: { status: 'CANCELLED', cancelledAt: new Date() },
     });
 
     if (appointment.googleEventId) {

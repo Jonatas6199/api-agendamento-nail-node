@@ -22,6 +22,32 @@ model User {
   @@map("users")
 }
 
+model AdminUser {
+  id           String         @id @default(uuid())
+  username     String         @unique
+  passwordHash String
+  active       Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  sessions     AdminSession[]
+
+  @@map("admin_users")
+}
+
+model AdminSession {
+  id          String    @id @default(uuid())
+  adminUserId String
+  apiKeyHash  String    @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([expiresAt])
+  @@map("admin_sessions")
+}
+
 model Procedure {
   id           String        @id @default(uuid())
   name         String
@@ -60,25 +86,33 @@ model Anamnesis {
 }
 
 model Appointment {
-  id            String            @id @default(uuid())
-  userId        String
-  procedureId   String
-  startTime     DateTime
-  endTime       DateTime
-  status        AppointmentStatus @default(SCHEDULED)
-  clientEmail   String?
-  googleEventId String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  anamnesis     Anamnesis?
-  procedure     Procedure         @relation(fields: [procedureId], references: [id])
-  user          User              @relation(fields: [userId], references: [id])
+  id                     String            @id @default(uuid())
+  userId                 String
+  procedureId            String
+  startTime              DateTime
+  endTime                DateTime
+  status                 AppointmentStatus @default(SCHEDULED)
+  clientEmail            String?
+  googleEventId          String?
+  totalPrice             Decimal?          @db.Decimal(10, 2)
+  amountPaid             Decimal           @default(0) @db.Decimal(10, 2)
+  remainingPaymentMethod String?
+  notes                  String?
+  confirmedAt            DateTime?
+  completedAt            DateTime?
+  cancelledAt            DateTime?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  anamnesis              Anamnesis?
+  procedure              Procedure         @relation(fields: [procedureId], references: [id])
+  user                   User              @relation(fields: [userId], references: [id])
 
   // Coluna antiga preservada apenas para manter o histórico existente.
   legacyHasGelOrAcrylic Boolean @default(false) @map("hasGelOrAcrylic") @ignore
 
   @@index([startTime])
   @@index([userId])
+  @@index([status, startTime])
   @@map("appointments")
 }
 

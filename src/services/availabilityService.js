@@ -127,10 +127,13 @@ async function getAvailableSlots(procedureId, dateStr) {
  * excludeAppointmentId é usado em casos de reagendamento, para ignorar o próprio registro.
  */
 async function isSlotAvailable(startTime, endTime, excludeAppointmentId = null) {
+  const startWithBuffer = new Date(
+    new Date(startTime).getTime() - CLEANUP_BUFFER_MINUTES * 60000
+  );
   const where = {
     status: 'SCHEDULED',
     startTime: { lt: endTime },
-    endTime: { gt: startTime },
+    endTime: { gt: startWithBuffer },
   };
 
   if (excludeAppointmentId) {

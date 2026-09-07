@@ -96,18 +96,25 @@ Body: {
   "startTime": "2026-08-10T14:00:00.000Z",
   "clientEmail": "cliente@email.com",   // opcional - se enviado, recebe convite do Google Agenda
   "anamnesis": {
-    "hasNailFungus": false,
-    "hasGelOrAcrylic": true,
-    "isPregnant": false,
-    "hasDiabetes": false,
-    "hasAllergies": false,
-    "allergiesDetails": null,
-    "medicationsInUse": null,
-    "observations": "Unha fraca, pediu reforço"
+    "isFirstVisit": true,
+    "usesGelPolish": true,
+    "hasCosmeticAllergy": false,
+    "cosmeticAllergyDetails": null,
+    "hasFrequentLifting": false,
+    "usesContinuousMedication": true,
+    "continuousMedicationDetails": "Medicamento informado pela cliente"
   }
 }
 ```
 Revalida a disponibilidade no momento da confirmação (evita conflito de dois clientes agendando o mesmo horário) e cria o evento no Google Agenda da profissional.
+
+O campo `isFirstVisit` é validado pela API. Se já existir qualquer agendamento para o usuário, ele será salvo como `false`, independentemente do valor enviado pelo frontend.
+
+### Consultar status da ficha e primeira visita
+```
+GET /api/users/:id/anamnesis-status
+```
+Retorna se a ficha é obrigatória, se o usuário possui agendamentos anteriores e se deve ser tratado como primeira visita.
 
 ### Listar agendamentos do cliente
 ```
@@ -159,3 +166,52 @@ src/
 - **Autenticação/autorização**: o login atual por telefone+CPF é adequado para identificar o cliente, mas não gera token de sessão. Se o frontend precisar manter sessão persistente seria interessante adicionar JWT nesse endpoint de login.
 - **Concorrência**: a checagem de disponibilidade é feita duas vezes (na consulta de slots e na confirmação), mas em cenários de altíssima concorrência considere adicionar uma constraint de exclusão no Postgres (`EXCLUDE USING gist`) para garantir atomicidade a nível de banco.
 - **Notificações**: hoje o convite por e-mail é feito pelo próprio Google Calendar (`sendUpdates: 'all'`). Se quiser enviar SMS/WhatsApp de confirmação, dá pra plugar isso no mesmo ponto onde o evento é criado.
+
+## 8. Painel administrativo
+
+As rotas sob `/api/admin` exigem dois headers emitidos no login:
+
+```text
+Authorization: Bearer <jwt>
+X-Admin-API-Key: <chave-de-sessao>
+```
+
+A chave é aleatória, tem validade curta e somente seu hash é armazenado no banco. Ela não deve ser configurada como variável `VITE_*` nem embutida no frontend.
+
+### Variáveis necessárias
+
+```env
+ADMIN_JWT_SECRET=segredo-aleatorio-com-no-minimo-32-caracteres
+ADMIN_SESSION_HOURS=8
+CORS_ORIGINS=https://seu-front-cliente.vercel.app,https://seu-painel.vercel.app
+BUSINESS_REVIEW_URL=https://link-opcional-de-avaliacao
+```
+
+Em produção, as rotas administrativas recusam tráfego que não tenha sido encaminhado por HTTPS.
+
+### Criar ou atualizar o administrador
+
+Defina temporariamente `ADMIN_USERNAME` e `ADMIN_PASSWORD` no ambiente local ou do comando. A senha deve ter pelo menos 12 caracteres.
+
+```bash
+npm run admin:create
+```
+
+O script salva somente o hash bcrypt da senha.
+
+### Principais rotas
+
+- `POST /api/admin/auth/login`
+- `GET /api/admin/auth/session`
+- `POST /api/admin/auth/logout`
+- `GET /api/admin/dashboard`
+- `GET|POST /api/admin/appointments`
+- `GET|PATCH /api/admin/appointments/:id`
+- `PATCH /api/admin/appointments/:id/confirm`
+- `PATCH /api/admin/appointments/:id/reschedule`
+- `PATCH /api/admin/appointments/:id/complete`
+- `PATCH /api/admin/appointments/:id/cancel`
+- `GET|POST /api/admin/clients`
+- `GET|PATCH /api/admin/clients/:id`
+- `GET /api/admin/settings`
+- CRUD administrativo de procedimentos, expediente e datas bloqueadas em `/api/admin/settings/*`
