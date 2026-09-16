@@ -74,7 +74,7 @@ router.get('/', asyncHandler(async (req, res) => {
   const periodWhere = {};
   if (where.occurredAt) periodWhere.occurredAt = where.occurredAt;
 
-  const [items, total, income, expenses, categories] = await prisma.$transaction([
+  const [items, total, income, expenses, categories] = await Promise.all([
     prisma.financialTransaction.findMany({
       where,
       include: {

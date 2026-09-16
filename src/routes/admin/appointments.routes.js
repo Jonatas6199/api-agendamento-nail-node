@@ -47,7 +47,7 @@ router.get('/', asyncHandler(async (req, res) => {
     ];
   }
 
-  const [items, total] = await prisma.$transaction([
+  const [items, total] = await Promise.all([
     prisma.appointment.findMany({
       where,
       include: { user: true, procedure: true, anamnesis: true },
