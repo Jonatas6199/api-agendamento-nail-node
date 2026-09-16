@@ -10,7 +10,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const procedures = await prisma.procedure.findMany({
       where: { active: true },
-      orderBy: { name: 'asc' },
+      orderBy: { ordem: 'asc' },
     });
     res.json(procedures);
   })

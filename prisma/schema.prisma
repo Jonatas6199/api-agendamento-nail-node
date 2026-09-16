@@ -59,6 +59,7 @@ model Procedure {
   updatedAt    DateTime      @updatedAt
   description  Json?
   appointments Appointment[]
+  ordem        Int? 
 
   @@map("procedures")
 }
