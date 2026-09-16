@@ -11,6 +11,65 @@ function parseMoney(value, fieldName) {
   return parsed;
 }
 
+function resolvePriceAdjustment(data, appointment = {}) {
+  const hasExplicitType = data.priceAdjustmentType !== undefined;
+  const basePrice = Number(
+    data.basePrice ?? appointment.basePrice ?? appointment.totalPrice ?? appointment.procedure?.price ?? 0
+  );
+  let type = hasExplicitType
+    ? String(data.priceAdjustmentType || '').toUpperCase() || null
+    : appointment.priceAdjustmentType || null;
+  let amount = data.priceAdjustmentAmount !== undefined
+    ? parseMoney(data.priceAdjustmentAmount, 'Valor do ajuste')
+    : hasExplicitType && !type ? 0 : Number(appointment.priceAdjustmentAmount || 0);
+
+  if (!amount) type = null;
+  if (amount > 0 && !['DISCOUNT', 'ADDITIONAL'].includes(type)) {
+    throw new ApiError(400, 'Selecione DESCONTO ou ADICIONAL para o ajuste de valor.');
+  }
+  if (type === 'DISCOUNT' && amount > basePrice) {
+    throw new ApiError(400, 'O desconto não pode ser maior que o valor-base do atendimento.');
+  }
+
+  const totalPrice = type === 'DISCOUNT'
+    ? basePrice - amount
+    : type === 'ADDITIONAL' ? basePrice + amount : basePrice;
+
+  return {
+    basePrice,
+    priceAdjustmentType: type,
+    priceAdjustmentAmount: amount,
+    priceAdjustmentReason: type ? (data.priceAdjustmentReason !== undefined
+      ? String(data.priceAdjustmentReason || '').trim() || null
+      : appointment.priceAdjustmentReason || null) : null,
+    totalPrice,
+  };
+}
+
+async function syncAppointmentIncome(tx, appointment) {
+  const amount = Number(appointment.amountPaid || 0);
+  if (amount <= 0) {
+    await tx.financialTransaction.deleteMany({ where: { appointmentId: appointment.id } });
+    return;
+  }
+
+  await tx.financialTransaction.upsert({
+    where: { appointmentId: appointment.id },
+    create: {
+      type: 'INCOME',
+      category: 'Atendimentos',
+      description: `${appointment.procedure.name} · ${appointment.user.name || appointment.user.phone}`,
+      amount,
+      occurredAt: new Date(),
+      appointmentId: appointment.id,
+    },
+    update: {
+      amount,
+      description: `${appointment.procedure.name} · ${appointment.user.name || appointment.user.phone}`,
+    },
+  });
+}
+
 async function syncCalendarCreate(appointment) {
   try {
     const googleEvent = await googleCalendarService.createEvent({
@@ -60,26 +119,26 @@ async function createAdminAppointment(data) {
     throw new ApiError(409, 'Este horário não está mais disponível.');
   }
 
-  const totalPrice = Number(procedure.price);
+  const price = resolvePriceAdjustment(data, { totalPrice: procedure.price, procedure });
   const amountPaid = parseMoney(data.amountPaid, 'Valor pago');
-  if (amountPaid > totalPrice) {
-    throw new ApiError(400, 'O valor pago não pode ser maior que o valor total.');
-  }
-
-  const appointment = await prisma.appointment.create({
-    data: {
-      userId,
-      procedureId,
-      startTime: start,
-      endTime: end,
-      clientEmail: data.clientEmail || null,
-      totalPrice,
-      amountPaid,
-      remainingPaymentMethod: data.remainingPaymentMethod || null,
-      notes: data.notes || null,
-      confirmedAt: data.confirmed ? new Date() : null,
-    },
-    include: { user: true, procedure: true, anamnesis: true },
+  const appointment = await prisma.$transaction(async (tx) => {
+    const created = await tx.appointment.create({
+      data: {
+        userId,
+        procedureId,
+        startTime: start,
+        endTime: end,
+        clientEmail: data.clientEmail || null,
+        ...price,
+        amountPaid,
+        remainingPaymentMethod: data.remainingPaymentMethod || null,
+        notes: data.notes || null,
+        confirmedAt: data.confirmed ? new Date() : null,
+      },
+      include: { user: true, procedure: true, anamnesis: true },
+    });
+    await syncAppointmentIncome(tx, created);
+    return created;
   });
 
   return syncCalendarCreate(appointment);
@@ -141,21 +200,27 @@ async function updateAdminAppointment(id, data) {
   if (data.remainingPaymentMethod !== undefined) {
     update.remainingPaymentMethod = data.remainingPaymentMethod || null;
   }
+  if (
+    data.priceAdjustmentType !== undefined
+    || data.priceAdjustmentAmount !== undefined
+    || data.priceAdjustmentReason !== undefined
+  ) {
+    Object.assign(update, resolvePriceAdjustment(data, appointment));
+  }
   if (data.amountPaid !== undefined) {
-    const amountPaid = parseMoney(data.amountPaid, 'Valor pago');
-    const totalPrice = Number(appointment.totalPrice ?? appointment.procedure.price);
-    if (amountPaid > totalPrice) {
-      throw new ApiError(400, 'O valor pago não pode ser maior que o valor total.');
-    }
-    update.amountPaid = amountPaid;
+    update.amountPaid = parseMoney(data.amountPaid, 'Valor pago');
   }
 
   if (!Object.keys(update).length) return appointment;
 
-  return prisma.appointment.update({
-    where: { id },
-    data: update,
-    include: { user: true, procedure: true, anamnesis: true },
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.appointment.update({
+      where: { id },
+      data: update,
+      include: { user: true, procedure: true, anamnesis: true },
+    });
+    if (data.amountPaid !== undefined) await syncAppointmentIncome(tx, updated);
+    return updated;
   });
 }
 
@@ -167,16 +232,17 @@ async function confirmAdminAppointment(id, data = {}) {
 
   const update = { confirmedAt: appointment.confirmedAt || new Date() };
   if (data.amountPaid !== undefined) {
-    const amountPaid = parseMoney(data.amountPaid, 'Valor pago');
-    const totalPrice = Number(appointment.totalPrice ?? appointment.procedure.price);
-    if (amountPaid > totalPrice) throw new ApiError(400, 'O valor pago não pode exceder o valor total.');
-    update.amountPaid = amountPaid;
+    update.amountPaid = parseMoney(data.amountPaid, 'Valor pago');
   }
 
-  return prisma.appointment.update({
-    where: { id },
-    data: update,
-    include: { user: true, procedure: true, anamnesis: true },
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.appointment.update({
+      where: { id },
+      data: update,
+      include: { user: true, procedure: true, anamnesis: true },
+    });
+    if (data.amountPaid !== undefined) await syncAppointmentIncome(tx, updated);
+    return updated;
   });
 }
 

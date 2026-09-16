@@ -23,13 +23,14 @@ model User {
 }
 
 model AdminUser {
-  id           String         @id @default(uuid())
-  username     String         @unique
-  passwordHash String
-  active       Boolean        @default(true)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  sessions     AdminSession[]
+  id                    String                 @id @default(uuid())
+  username              String                 @unique
+  passwordHash          String
+  active                Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  sessions              AdminSession[]
+  financialTransactions FinancialTransaction[]
 
   @@map("admin_users")
 }
@@ -86,26 +87,31 @@ model Anamnesis {
 }
 
 model Appointment {
-  id                     String            @id @default(uuid())
+  id                     String                 @id @default(uuid())
   userId                 String
   procedureId            String
   startTime              DateTime
   endTime                DateTime
-  status                 AppointmentStatus @default(SCHEDULED)
+  status                 AppointmentStatus      @default(SCHEDULED)
   clientEmail            String?
   googleEventId          String?
-  totalPrice             Decimal?          @db.Decimal(10, 2)
-  amountPaid             Decimal           @default(0) @db.Decimal(10, 2)
+  totalPrice             Decimal?               @db.Decimal(10, 2)
+  basePrice              Decimal?               @db.Decimal(10, 2)
+  priceAdjustmentType    PriceAdjustmentType?
+  priceAdjustmentAmount  Decimal                @default(0) @db.Decimal(10, 2)
+  priceAdjustmentReason  String?
+  amountPaid             Decimal                @default(0) @db.Decimal(10, 2)
   remainingPaymentMethod String?
   notes                  String?
   confirmedAt            DateTime?
   completedAt            DateTime?
   cancelledAt            DateTime?
-  createdAt              DateTime          @default(now())
-  updatedAt              DateTime          @updatedAt
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
   anamnesis              Anamnesis?
-  procedure              Procedure         @relation(fields: [procedureId], references: [id])
-  user                   User              @relation(fields: [userId], references: [id])
+  procedure              Procedure              @relation(fields: [procedureId], references: [id])
+  user                   User                   @relation(fields: [userId], references: [id])
+  financialTransactions  FinancialTransaction[]
 
   // Coluna antiga preservada apenas para manter o histórico existente.
   legacyHasGelOrAcrylic Boolean @default(false) @map("hasGelOrAcrylic") @ignore
@@ -114,6 +120,27 @@ model Appointment {
   @@index([userId])
   @@index([status, startTime])
   @@map("appointments")
+}
+
+model FinancialTransaction {
+  id            String                   @id @default(uuid())
+  type          FinancialTransactionType
+  category      String
+  description   String
+  amount        Decimal                  @db.Decimal(10, 2)
+  occurredAt    DateTime
+  paymentMethod String?
+  notes         String?
+  appointmentId String?                  @unique
+  adminUserId   String?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  appointment   Appointment?             @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  adminUser     AdminUser?               @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([type, occurredAt])
+  @@index([category])
+  @@map("financial_transactions")
 }
 
 model WorkingHours {
@@ -140,4 +167,14 @@ enum AppointmentStatus {
   SCHEDULED
   CANCELLED
   COMPLETED
+}
+
+enum PriceAdjustmentType {
+  DISCOUNT
+  ADDITIONAL
+}
+
+enum FinancialTransactionType {
+  INCOME
+  EXPENSE
 }

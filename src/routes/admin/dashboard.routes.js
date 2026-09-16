@@ -30,9 +30,12 @@ router.get('/', asyncHandler(async (_req, res) => {
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 7);
   const recentCancellationStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const monthStart = new Date(`${getLocalDateString(now).slice(0, 7)}-01T00:00:00-03:00`);
+  const monthEnd = new Date(monthStart);
+  monthEnd.setMonth(monthEnd.getMonth() + 1);
 
   const activeStatuses = ['SCHEDULED', 'COMPLETED'];
-  const [todayCount, weekCount, clientsCount, pendingCount, cancellationsCount, nextToday] = await Promise.all([
+  const [todayCount, weekCount, clientsCount, pendingCount, cancellationsCount, nextToday, monthIncome, monthExpenses] = await Promise.all([
     prisma.appointment.count({
       where: { startTime: { gte: todayStart, lt: todayEnd }, status: { in: activeStatuses } },
     }),
@@ -48,7 +51,18 @@ router.get('/', asyncHandler(async (_req, res) => {
       orderBy: { startTime: 'asc' },
       take: 8,
     }),
+    prisma.financialTransaction.aggregate({
+      where: { type: 'INCOME', occurredAt: { gte: monthStart, lt: monthEnd } },
+      _sum: { amount: true },
+    }),
+    prisma.financialTransaction.aggregate({
+      where: { type: 'EXPENSE', occurredAt: { gte: monthStart, lt: monthEnd } },
+      _sum: { amount: true },
+    }),
   ]);
+
+  const incomeTotal = Number(monthIncome._sum.amount || 0);
+  const expenseTotal = Number(monthExpenses._sum.amount || 0);
 
   res.json({
     metrics: {
@@ -58,6 +72,9 @@ router.get('/', asyncHandler(async (_req, res) => {
       pendingConfirmation: pendingCount,
       recentCancellations: cancellationsCount,
       nextAppointments: nextToday.length,
+      monthIncome: incomeTotal,
+      monthExpenses: expenseTotal,
+      monthBalance: incomeTotal - expenseTotal,
     },
     nextToday,
   });

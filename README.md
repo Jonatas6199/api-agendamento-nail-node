@@ -213,5 +213,9 @@ O script salva somente o hash bcrypt da senha.
 - `PATCH /api/admin/appointments/:id/cancel`
 - `GET|POST /api/admin/clients`
 - `GET|PATCH /api/admin/clients/:id`
+- `GET|POST /api/admin/finances`
+- `PATCH|DELETE /api/admin/finances/:id`
 - `GET /api/admin/settings`
 - CRUD administrativo de procedimentos, expediente e datas bloqueadas em `/api/admin/settings/*`
+
+Pagamentos registrados nos agendamentos são sincronizados automaticamente como entradas financeiras. Entradas manuais e despesas podem ser gerenciadas pelas rotas de finanças; lançamentos vinculados a agendamentos devem ser alterados no próprio agendamento.

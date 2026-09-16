@@ -113,6 +113,7 @@ router.post(
           startTime: start,
           endTime: end,
           clientEmail: clientEmail || null,
+          basePrice: procedure.price,
           totalPrice: procedure.price,
           // Cria o registro na tabela de Anamnese apenas se a propriedade 'anamnesis' existir no body
           ...(anamnesis && {
