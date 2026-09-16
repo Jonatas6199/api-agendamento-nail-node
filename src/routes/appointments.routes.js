@@ -8,6 +8,8 @@ const googleCalendarService = require('../services/googleCalendarService');
 const { hasRecentAnamnesis, hasPreviousAppointments } = require('../services/anamnesisService');
 
 const router = express.Router();
+const CANCELLATION_NOTICE_MS = 24 * 60 * 60 * 1000;
+const CONTACT_MESSAGE = 'Cancelamentos e alterações pelo site exigem pelo menos 24 horas de antecedência. Entre em contato pelo WhatsApp.';
 
 /**
  * POST /api/appointments
@@ -172,7 +174,7 @@ router.post(
       return res.status(201).json({
         appointment,
         warning:
-          'Agendamento confirmado, porém houve falha ao sincronizar com o Google Agenda. A equipe será notificada.',
+          'Agendamento solicitado, porém houve falha ao sincronizar com o Google Agenda. A equipe será notificada.',
       });
     }
 
@@ -233,6 +235,10 @@ router.patch(
       throw new ApiError(400, 'Somente agendamentos ativos podem ser reagendados.');
     }
 
+    if (appointment.startTime.getTime() - Date.now() < CANCELLATION_NOTICE_MS) {
+      throw new ApiError(400, CONTACT_MESSAGE);
+    }
+
     const newStart = new Date(startTime);
     if (isNaN(newStart.getTime())) throw new ApiError(400, 'startTime inválido.');
     if (newStart < new Date()) throw new ApiError(400, 'Não é possível reagendar para uma data/horário passado.');
@@ -244,9 +250,17 @@ router.patch(
       throw new ApiError(409, 'Este horário já está ocupado. Escolha outro.');
     }
 
-    const updated = await prisma.appointment.update({
-      where: { id: appointment.id },
+    const changed = await prisma.appointment.updateMany({
+      where: {
+        id: appointment.id,
+        status: 'SCHEDULED',
+        startTime: { gte: new Date(Date.now() + CANCELLATION_NOTICE_MS) },
+      },
       data: { startTime: newStart, endTime: newEnd },
+    });
+    if (!changed.count) throw new ApiError(409, CONTACT_MESSAGE);
+    const updated = await prisma.appointment.findUnique({
+      where: { id: appointment.id },
       include: { procedure: true, anamnesis: true },
     });
 
@@ -273,14 +287,19 @@ router.patch(
   asyncHandler(async (req, res) => {
     const appointment = await prisma.appointment.findUnique({ where: { id: req.params.id } });
     if (!appointment) throw new ApiError(404, 'Agendamento não encontrado.');
-    if (appointment.status === 'CANCELLED') {
-      throw new ApiError(400, 'Este agendamento já está cancelado.');
+    if (appointment.status !== 'SCHEDULED') {
+      throw new ApiError(400, 'Somente agendamentos ativos podem ser cancelados.');
     }
+    const now = new Date();
+    const earliestStart = new Date(now.getTime() + CANCELLATION_NOTICE_MS);
+    if (appointment.startTime < earliestStart) throw new ApiError(400, CONTACT_MESSAGE);
 
-    const updated = await prisma.appointment.update({
-      where: { id: appointment.id },
-      data: { status: 'CANCELLED', cancelledAt: new Date() },
+    const changed = await prisma.appointment.updateMany({
+      where: { id: appointment.id, status: 'SCHEDULED', startTime: { gte: earliestStart } },
+      data: { status: 'CANCELLED', cancelledAt: now },
     });
+    if (!changed.count) throw new ApiError(409, 'O agendamento foi alterado. Atualize a página e tente novamente.');
+    const updated = await prisma.appointment.findUnique({ where: { id: appointment.id } });
 
     if (appointment.googleEventId) {
       try {

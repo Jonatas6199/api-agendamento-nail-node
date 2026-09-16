@@ -34,6 +34,10 @@ router.get('/', asyncHandler(async (req, res) => {
     where.status = 'SCHEDULED';
     where.confirmedAt = null;
   }
+  if (req.query.confirmed === 'true') {
+    where.status = 'SCHEDULED';
+    where.confirmedAt = { not: null };
+  }
   if (req.query.search) {
     const search = String(req.query.search).trim();
     where.OR = [

@@ -252,22 +252,28 @@ async function completeAdminAppointment(id) {
     throw new ApiError(400, 'Somente agendamentos ativos podem ser concluídos.');
   }
 
-  return prisma.appointment.update({
-    where: { id },
+  if (!appointment.confirmedAt) {
+    throw new ApiError(400, 'Confirme o agendamento antes de finalizar o atendimento.');
+  }
+
+  const changed = await prisma.appointment.updateMany({
+    where: { id, status: 'SCHEDULED', confirmedAt: { not: null } },
     data: { status: 'COMPLETED', completedAt: new Date() },
-    include: { user: true, procedure: true, anamnesis: true },
   });
+  if (!changed.count) throw new ApiError(409, 'O agendamento foi alterado. Atualize a página.');
+  return getActiveAppointment(id);
 }
 
 async function cancelAdminAppointment(id) {
   const appointment = await getActiveAppointment(id);
-  if (appointment.status === 'CANCELLED') throw new ApiError(400, 'Agendamento já cancelado.');
+  if (appointment.status !== 'SCHEDULED') throw new ApiError(400, 'Somente agendamentos ativos podem ser cancelados.');
 
-  const updated = await prisma.appointment.update({
-    where: { id },
+  const changed = await prisma.appointment.updateMany({
+    where: { id, status: 'SCHEDULED' },
     data: { status: 'CANCELLED', cancelledAt: new Date() },
-    include: { user: true, procedure: true, anamnesis: true },
   });
+  if (!changed.count) throw new ApiError(409, 'O agendamento foi alterado. Atualize a página.');
+  const updated = await getActiveAppointment(id);
 
   if (appointment.googleEventId) {
     try {
